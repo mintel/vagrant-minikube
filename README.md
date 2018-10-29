@@ -43,9 +43,8 @@ You can sync. folders - see the following:
 
 By default, Vagrant will share your project directory (the directory with the Vagrantfile) to /vagrant.
 
-Therefore, put any code you want to access in the VM into `/vagrant` ;)
-
 ## Known Issues
 
+- Provide a way to sync. folders easily (environment vars? wrapper?)
 - Can't use ubuntu 18.04 vagrant image due to using `upstart` instead of `systemd` (minikube fails)
 - Sometimes hit this issue on arch https://github.com/hashicorp/vagrant/issues/9666
