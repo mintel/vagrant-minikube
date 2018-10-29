@@ -2,7 +2,7 @@
 
 Provide a consistent way to run minikube locally across different distro's..
 
-Mostly used for demo's, tutorials and workshops. If you are using minikube for day to day tasks, install it using your package manager.
+Mostly used for demo's, tutorials and workshops. If you are using minikube for day to day tasks, install it using your package manager instead (and avoid the extra overhead of Vagrant).
 
 ## Install
 
