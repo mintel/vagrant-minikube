@@ -4,6 +4,8 @@ Provide a consistent way to run minikube locally across different distro's..
 
 Mostly used for demo's, tutorials and workshops. If you are using minikube for day to day tasks, install it using your package manager instead (and avoid the extra overhead of Vagrant).
 
+Note, this installs the latest `minikube` and `kubectl` packages available for`ubuntu 16.04`
+
 ## Install
 
 Ensure you have vagrant installed.
