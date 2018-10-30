@@ -1,5 +1,6 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
+require 'etc'
 
 VAGRANTFILE_API_VERSION = "2"
 Vagrant.require_version ">= 2.0.0"
@@ -10,6 +11,13 @@ NODES = ENV['NODES'] || 1
 # Memory & CPUs
 MEM = ENV['MEM'] || 4096
 CPUS = ENV['CPUS'] || 2
+
+# 9p Mount
+UID = Etc.getpwnam(ENV['USER']).uid 
+#SRCDIR = ENV['SRCDIR'] || "/home/"+ENV['USER']+"/test"
+SRCDIR = ENV['SRCDIR'] || "/dev/shm/test"
+DSTDIR = ENV['DSTDIR'] || "/home/vagrant/data"
+
 
 # Common installation script
 $installer = <<SCRIPT
@@ -51,7 +59,7 @@ sudo -E minikube start --vm-driver=none
 SCRIPT
 
 
-required_plugins = %w(vagrant-cachier vagrant-libvirt)
+required_plugins = %w(vagrant-libvirt)
 
 required_plugins.each do |plugin|
   need_restart = false
@@ -63,36 +71,32 @@ required_plugins.each do |plugin|
 end
 
 
-def configureVM(vmCfg, hostname, cpus, mem)
+def configureVM(vmCfg, hostname, cpus, mem, uid, srcdir, dstdir)
 
-  vmCfg.vm.box = "yk0/ubuntu-xenial"
+  vmCfg.vm.box = "roboxes/ubuntu1804"
   
   vmCfg.vm.hostname = hostname
-  vmCfg.vm.network "private_network", type: "dhcp"
+  vmCfg.vm.network "private_network", type: "dhcp",  :model_type => "virtio"
 
-  #Adding Vagrant-cachier
-  if Vagrant.has_plugin?("vagrant-cachier")
-     vmCfg.cache.scope = :machine
-     vmCfg.cache.enable :apt
-     vmCfg.cache.enable :gem
+  # First and only Provider - Vagrant will default to this unless overwritten on CLI 
+  vmCfg.vm.provider "libvirt" do |provider|
+    provider.memory = mem
+    provider.cpus = cpus
+    provider.driver = "kvm"
+    provider.disk_bus = "virtio"
+    provider.machine_virtual_size = 64
   end
   
-  # Set resources w.r.t Virtualbox provider
-  vmCfg.vm.provider "virtualbox" do |vb|
-    vb.memory = mem
-    vb.cpus = cpus
-    vb.customize ["modifyvm", :id, "--cableconnected1", "on"]
-  end
-  
-   # ensure docker is installed
-  vmCfg.vm.provision "docker"
 
+  vmCfg.vm.synced_folder '.', '/vagrant', disabled: true
   # sync your laptop's development with this Vagrant VM
-  # vmCfg.vm.synced_folder '$src-dir', '$dest-dir-in-vm'
+  vmCfg.vm.synced_folder srcdir, dstdir, type: '9p', accessmode: "mapped", disabled: false, owner: uid
 
+  # ensure docker is installed
+  #vmCfg.vm.provision "docker"
   # Script to prepare the VM
-  vmCfg.vm.provision "shell", inline: $installer, privileged: false 
-  vmCfg.vm.provision "shell", inline: $minikubescript, privileged: false
+  #vmCfg.vm.provision "shell", inline: $installer, privileged: false 
+  #vmCfg.vm.provision "shell", inline: $minikubescript, privileged: false
 
   return vmCfg
 end
@@ -104,9 +108,12 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
     hostname = "minikube-vagrant-%02d" % [i]
     cpus = CPUS
     mem = MEM
+    uid = UID
+    srcdir = SRCDIR
+    dstdir = DSTDIR
     
     config.vm.define hostname do |vmCfg|
-      vmCfg = configureVM(vmCfg, hostname, cpus, mem)  
+      vmCfg = configureVM(vmCfg, hostname, cpus, mem, uid, srcdir, dstdir)  
     end
   end
 
