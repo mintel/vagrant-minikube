@@ -100,9 +100,6 @@ end
 # Entry point of this Vagrantfile
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
-  # I do not want this
-  config.vbguest.auto_update = false
-  
   1.upto(NODES.to_i) do |i|
     hostname = "minikube-vagrant-%02d" % [i]
     cpus = CPUS
