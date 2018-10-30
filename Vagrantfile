@@ -51,7 +51,7 @@ sudo -E minikube start --vm-driver=none
 SCRIPT
 
 
-required_plugins = %w(vagrant-cachier vagrant-vbguest vagrant-libvirt)
+required_plugins = %w(vagrant-cachier vagrant-libvirt)
 
 required_plugins.each do |plugin|
   need_restart = false
