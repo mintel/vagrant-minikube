@@ -1,6 +1,5 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
-require 'etc'
 
 VAGRANTFILE_API_VERSION = "2"
 Vagrant.require_version ">= 2.0.0"
@@ -12,20 +11,50 @@ NODES = ENV['NODES'] || 1
 MEM = ENV['MEM'] || 4096
 CPUS = ENV['CPUS'] || 2
 
-# 9p Mount
-UID = Etc.getpwnam(ENV['USER']).uid 
+# User Data Mount
 #SRCDIR = ENV['SRCDIR'] || "/home/"+ENV['USER']+"/test"
-SRCDIR = ENV['SRCDIR'] || "/dev/shm/test"
+SRCDIR = ENV['SRCDIR'] || "/tmp/srcdata"
 DSTDIR = ENV['DSTDIR'] || "/home/vagrant/data"
 
+# Management 
+GROWPART = ENV['GROWPART'] || "true"
+
+# Minikube Variables
+KUBERNETES_VERSION = ENV['KUBERNETES_VERSION'] || "1.11.4"
 
 # Common installation script
 $installer = <<SCRIPT
 #!/bin/bash
 
 # Update apt and get dependencies
-sudo apt-get update
-sudo apt-get install -y zip unzip curl wget
+sudo apt-get -y update
+sudo apt-get -y upgrade
+sudo apt-get install -y zip unzip curl wget socat ebtables
+
+SCRIPT
+
+$docker = <<SCRIPT
+#!/bin/bash
+
+#curl -fsSL https://apt.dockerproject.org/gpg | sudo apt-key add -
+#sudo apt-add-repository "deb https://apt.dockerproject.org/repo ubuntu-xenial main"
+#sudo apt-get install -y docker-engine=17.03.1~ce-0~ubuntu-xenial
+
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+sudo apt-get -y update
+sudo apt-get install -y docker-ce=17.03.3~ce-0~ubuntu-xenial
+sudo systemctl start docker
+
+sudo usermod -a -G docker vagrant
+
+SCRIPT
+
+$growpart = <<SCRIPT
+#!/bin/bash
+
+sudo growpart /dev/vda 3
+sudo resize2fs /dev/vda3
 
 SCRIPT
 
@@ -33,16 +62,24 @@ $minikubescript = <<SCRIPT
 #!/bin/bash
 
 #Install minikube
-curl -Lo minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+echo "Downloading Minikube"
+curl -q -Lo minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64 2>/dev/null
 chmod +x minikube 
 sudo mv minikube /usr/local/bin/
 
 #Install kubectl
-curl -Lo kubectl https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
+echo "Downloading Kubectl"
+curl -q -Lo kubectl https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl 2>/dev/null
 chmod +x kubectl 
 sudo mv kubectl /usr/local/bin/
 
+# Install crictl
+curl -qL https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.12.0/crictl-v1.12.0-linux-amd64.tar.gz 2>/dev/null | tar xzvf -
+chmod +x crictl
+sudo mv crictl /usr/local/bin/
+
 #Setup minikube
+echo "127.0.0.1 minikube minikube." | sudo tee -a /etc/hosts
 mkdir -p $HOME/.minikube
 mkdir -p $HOME/.kube
 touch $HOME/.kube/config
@@ -53,13 +90,29 @@ export KUBECONFIG=$HOME/.kube/config
 sudo chown -R $USER:$USER $HOME/.kube
 sudo chown -R $USER:$USER $HOME/.minikube
 
-# Start minikube 
-sudo -E minikube start --vm-driver=none
+minikube config set vm-driver none
+minikube config set kubernetes-version v1.11.4
+minikube config set bootstrapper kubeadm
+
+export MINIKUBE_WANTUPDATENOTIFICATION=false
+export MINIKUBE_WANTREPORTERRORPROMPT=false
+export MINIKUBE_HOME=$HOME
+export CHANGE_MINIKUBE_NONE_USER=true
+export KUBECONFIG=$HOME/.kube/config
+
+# Disable SWAP since is not supported on a kubernetes cluster
+sudo swapoff -a
+
+## Start minikube 
+sudo -E minikube start -v 4
+
+## Addons 
+
 
 SCRIPT
 
 
-required_plugins = %w(vagrant-libvirt)
+required_plugins = %w(vagrant-sshfs vagrant-libvirt)
 
 required_plugins.each do |plugin|
   need_restart = false
@@ -71,32 +124,36 @@ required_plugins.each do |plugin|
 end
 
 
-def configureVM(vmCfg, hostname, cpus, mem, uid, srcdir, dstdir)
+def configureVM(vmCfg, hostname, cpus, mem, srcdir, dstdir)
 
-  vmCfg.vm.box = "roboxes/ubuntu1804"
+  vmCfg.vm.box = "roboxes/ubuntu1604"
   
   vmCfg.vm.hostname = hostname
   vmCfg.vm.network "private_network", type: "dhcp",  :model_type => "virtio"
 
+  vmCfg.vm.synced_folder '.', '/vagrant', disabled: true
+  # sync your laptop's development with this Vagrant VM
+  vmCfg.vm.synced_folder srcdir, dstdir, type: "rsync", rsync__exclude: ".git/"
+
   # First and only Provider - Vagrant will default to this unless overwritten on CLI 
-  vmCfg.vm.provider "libvirt" do |provider|
+  vmCfg.vm.provider "libvirt" do |provider, override|
     provider.memory = mem
     provider.cpus = cpus
     provider.driver = "kvm"
     provider.disk_bus = "virtio"
     provider.machine_virtual_size = 64
+ 
+    override.vm.synced_folder srcdir, dstdir, type: 'sshfs', ssh_opts_append: "-o Compression=yes", sshfs_opts_append: "-o cache=no", disabled: false, create: true
   end
   
 
-  vmCfg.vm.synced_folder '.', '/vagrant', disabled: true
-  # sync your laptop's development with this Vagrant VM
-  vmCfg.vm.synced_folder srcdir, dstdir, type: '9p', accessmode: "mapped", disabled: false, owner: uid
 
-  # ensure docker is installed
-  #vmCfg.vm.provision "docker"
+  # ensure docker is installed # Use our script so we can get a proper support version
+  vmCfg.vm.provision "shell", inline: $docker, privileged: false 
   # Script to prepare the VM
-  #vmCfg.vm.provision "shell", inline: $installer, privileged: false 
-  #vmCfg.vm.provision "shell", inline: $minikubescript, privileged: false
+  vmCfg.vm.provision "shell", inline: $installer, privileged: false 
+  vmCfg.vm.provision "shell", inline: $growpart, privileged: false if GROWPART == "true"
+  vmCfg.vm.provision "shell", inline: $minikubescript, privileged: false
 
   return vmCfg
 end
@@ -108,12 +165,11 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
     hostname = "minikube-vagrant-%02d" % [i]
     cpus = CPUS
     mem = MEM
-    uid = UID
     srcdir = SRCDIR
     dstdir = DSTDIR
     
     config.vm.define hostname do |vmCfg|
-      vmCfg = configureVM(vmCfg, hostname, cpus, mem, uid, srcdir, dstdir)  
+      vmCfg = configureVM(vmCfg, hostname, cpus, mem, srcdir, dstdir)  
     end
   end
 
