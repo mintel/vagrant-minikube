@@ -107,7 +107,7 @@ sudo swapoff -a
 sudo -E minikube start -v 4
 
 ## Addons 
-
+sudo -E minikube addons  enable ingress
 
 SCRIPT
 
