@@ -69,7 +69,7 @@ sudo mv minikube /usr/local/bin/
 
 #Install kubectl
 echo "Downloading Kubectl"
-curl -q -Lo kubectl https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl 2>/dev/null
+curl -q -Lo kubectl https://storage.googleapis.com/kubernetes-release/release/v${KUBERNETES_VERSION}/bin/linux/amd64/kubectl 2>/dev/null
 chmod +x kubectl 
 sudo mv kubectl /usr/local/bin/
 
@@ -91,7 +91,7 @@ sudo chown -R $USER:$USER $HOME/.kube
 sudo chown -R $USER:$USER $HOME/.minikube
 
 minikube config set vm-driver none
-minikube config set kubernetes-version v1.11.4
+minikube config set kubernetes-version v${KUBERNETES_VERSION}
 minikube config set bootstrapper kubeadm
 
 export MINIKUBE_WANTUPDATENOTIFICATION=false
@@ -153,7 +153,7 @@ def configureVM(vmCfg, hostname, cpus, mem, srcdir, dstdir)
   # Script to prepare the VM
   vmCfg.vm.provision "shell", inline: $installer, privileged: false 
   vmCfg.vm.provision "shell", inline: $growpart, privileged: false if GROWPART == "true"
-  vmCfg.vm.provision "shell", inline: $minikubescript, privileged: false
+  vmCfg.vm.provision "shell", inline: $minikubescript, privileged: false, env: {"KUBERNETES_VERSION" => KUBERNETES_VERSION}
 
   return vmCfg
 end
