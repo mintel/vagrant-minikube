@@ -13,7 +13,7 @@ CPUS = ENV['CPUS'] || 2
 
 # User Data Mount
 #SRCDIR = ENV['SRCDIR'] || "/home/"+ENV['USER']+"/test"
-SRCDIR = ENV['SRCDIR'] || "/tmp/srcdata"
+SRCDIR = ENV['SRCDIR'] || "/tmp/vagrant"
 DSTDIR = ENV['DSTDIR'] || "/home/vagrant/data"
 
 # Management 
@@ -135,7 +135,7 @@ def configureVM(vmCfg, hostname, cpus, mem, srcdir, dstdir)
 
   vmCfg.vm.synced_folder '.', '/vagrant', disabled: true
   # sync your laptop's development with this Vagrant VM
-  vmCfg.vm.synced_folder srcdir, dstdir, type: "rsync", rsync__exclude: ".git/"
+  vmCfg.vm.synced_folder srcdir, dstdir, type: "rsync", rsync__exclude: ".git/", create: true
 
   # First Provider - Libvirt
   vmCfg.vm.provider "libvirt" do |provider, override|
@@ -153,7 +153,7 @@ def configureVM(vmCfg, hostname, cpus, mem, srcdir, dstdir)
     provider.cpus = cpus
     provider.customize ["modifyvm", :id, "--cableconnected1", "on"]
 
-    override.vm.synced_folder srcdir, dstdir, type: 'virtualbox'
+    override.vm.synced_folder srcdir, dstdir, type: 'virtualbox', create: true
   end
 
   # ensure docker is installed # Use our script so we can get a proper support version
