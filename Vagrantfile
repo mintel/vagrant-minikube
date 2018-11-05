@@ -13,7 +13,7 @@ CPUS = ENV['CPUS'] || 2
 
 # User Data Mount
 #SRCDIR = ENV['SRCDIR'] || "/home/"+ENV['USER']+"/test"
-SRCDIR = ENV['SRCDIR'] || "/tmp/srcdata"
+SRCDIR = ENV['SRCDIR'] || "/tmp/vagrant"
 DSTDIR = ENV['DSTDIR'] || "/home/vagrant/data"
 
 # Management 
@@ -53,8 +53,10 @@ SCRIPT
 $growpart = <<SCRIPT
 #!/bin/bash
 
-sudo growpart /dev/vda 3
-sudo resize2fs /dev/vda3
+if [[ -b /dev/vda3 ]]; then
+  sudo growpart /dev/vda 3
+  sudo resize2fs /dev/vda3
+fi
 
 SCRIPT
 
@@ -112,7 +114,7 @@ sudo -E minikube addons  enable ingress
 SCRIPT
 
 
-required_plugins = %w(vagrant-sshfs vagrant-libvirt)
+required_plugins = %w(vagrant-sshfs vagrant-vbguest vagrant-libvirt)
 
 required_plugins.each do |plugin|
   need_restart = false
@@ -129,13 +131,13 @@ def configureVM(vmCfg, hostname, cpus, mem, srcdir, dstdir)
   vmCfg.vm.box = "roboxes/ubuntu1604"
   
   vmCfg.vm.hostname = hostname
-  vmCfg.vm.network "private_network", type: "dhcp",  :model_type => "virtio"
+  vmCfg.vm.network "private_network", type: "dhcp",  :model_type => "virtio", :autostart => true
 
   vmCfg.vm.synced_folder '.', '/vagrant', disabled: true
   # sync your laptop's development with this Vagrant VM
-  vmCfg.vm.synced_folder srcdir, dstdir, type: "rsync", rsync__exclude: ".git/"
+  vmCfg.vm.synced_folder srcdir, dstdir, type: "rsync", rsync__exclude: ".git/", create: true
 
-  # First and only Provider - Vagrant will default to this unless overwritten on CLI 
+  # First Provider - Libvirt
   vmCfg.vm.provider "libvirt" do |provider, override|
     provider.memory = mem
     provider.cpus = cpus
@@ -146,7 +148,13 @@ def configureVM(vmCfg, hostname, cpus, mem, srcdir, dstdir)
     override.vm.synced_folder srcdir, dstdir, type: 'sshfs', ssh_opts_append: "-o Compression=yes", sshfs_opts_append: "-o cache=no", disabled: false, create: true
   end
   
+  vmCfg.vm.provider "virtualbox" do |provider, override|
+    provider.memory = mem
+    provider.cpus = cpus
+    provider.customize ["modifyvm", :id, "--cableconnected1", "on"]
 
+    override.vm.synced_folder srcdir, dstdir, type: 'virtualbox', create: true
+  end
 
   # ensure docker is installed # Use our script so we can get a proper support version
   vmCfg.vm.provision "shell", inline: $docker, privileged: false 
@@ -160,6 +168,8 @@ end
 
 # Entry point of this Vagrantfile
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+
+  config.vbguest.auto_update = false
 
   1.upto(NODES.to_i) do |i|
     hostname = "minikube-vagrant-%02d" % [i]
