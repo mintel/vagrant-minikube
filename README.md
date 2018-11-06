@@ -6,21 +6,25 @@ Mostly used for demo's, tutorials and workshops. If you are using minikube for d
 
 Note, this installs the latest `minikube` and `kubectl` packages available for ubuntu 16.04.
 
-## Install
+## Install Pre-requisites
 
-Ensure you have vagrant installed.
+Ensure you have vagrant installed (should also support mac/windows)
+
+https://www.vagrantup.com/docs/installation/
 
 ### Arch
 ```
-sudo pacman -S vagrant 
+sudo pacman -S vagrant
 ```
 
-### Ubuntu 
+### Ubuntu
 ```
 sudo apt-get install vagrant
 ```
 
 ## Run it
+
+Clone this repo then:
 
 ```
 vagrant up
@@ -39,14 +43,8 @@ kubectl get nodes
 
 ## Access your code inside the VM
 
-You can sync. folders - see the following:
-- https://www.vagrantup.com/docs/synced-folders/
-- https://www.vagrantup.com/docs/synced-folders/basic_usage.html
+We automatically mount `/tmp/vagrant` into `/home/vagrant/data`.
 
-By default, Vagrant will share your project directory (the directory with the Vagrantfile) to /vagrant.
+For example, you may want to `git clone` some kubernetes manifests into `/tmp/vagrant` on your host-machine, then you can access them in the vagrant machine.
 
-## Known Issues
-
-- Provide a way to sync. folders easily (environment vars? wrapper?)
-- Can't use ubuntu 18.04 vagrant image due to using `upstart` instead of `systemd` (minikube fails)
-- Sometimes hit this issue on arch https://github.com/hashicorp/vagrant/issues/9666
+This is bi-directional, and achieved via [vagrant-sshfs](https://github.com/dustymabe/vagrant-sshfs)
