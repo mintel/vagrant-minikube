@@ -8,7 +8,7 @@ Vagrant.require_version ">= 2.0.0"
 NODES = ENV['NODES'] || 1
 
 # Memory & CPUs
-MEM = ENV['MEM'] || 4096
+MEM = ENV['MEM'] || 6144
 CPUS = ENV['CPUS'] || 2
 
 # User Data Mount
@@ -29,7 +29,7 @@ $installer = <<SCRIPT
 # Update apt and get dependencies
 sudo apt-get -y update
 sudo apt-get -y upgrade
-sudo apt-get install -y zip unzip curl wget socat ebtables
+sudo apt-get install -y zip unzip curl wget socat ebtables git vim 
 
 SCRIPT
 
@@ -56,6 +56,9 @@ $growpart = <<SCRIPT
 if [[ -b /dev/vda3 ]]; then
   sudo growpart /dev/vda 3
   sudo resize2fs /dev/vda3
+elif [[ -b /dev/sda3 ]]; then
+  sudo growpart /dev/sda 3
+  sudo resize2fs /dev/sda3
 fi
 
 SCRIPT
@@ -80,6 +83,20 @@ curl -qL https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.12.0/
 chmod +x crictl
 sudo mv crictl /usr/local/bin/
 
+#Install stern
+# TODO: Check sha256sum
+echo "Downloading Stern"
+curl -q -Lo stern https://github.com/wercker/stern/releases/download/1.10.0/stern_linux_amd64 2>/dev/null                                                                                 
+chmod +x stern
+sudo mv stern /usr/local/bin/
+
+#Install kubecfg
+# TODO: Check sha256sum
+echo "Downloading Kubecfg"
+curl -q -Lo kubecfg https://github.com/ksonnet/kubecfg/releases/download/v0.9.0/kubecfg-linux-amd64 2>/dev/null                                                      
+chmod +x kubecfg
+sudo mv kubecfg /usr/local/bin/
+
 #Setup minikube
 echo "127.0.0.1 minikube minikube." | sudo tee -a /etc/hosts
 mkdir -p $HOME/.minikube
@@ -92,10 +109,6 @@ export KUBECONFIG=$HOME/.kube/config
 sudo chown -R $USER:$USER $HOME/.kube
 sudo chown -R $USER:$USER $HOME/.minikube
 
-minikube config set vm-driver none
-minikube config set kubernetes-version v${KUBERNETES_VERSION}
-minikube config set bootstrapper kubeadm
-
 export MINIKUBE_WANTUPDATENOTIFICATION=false
 export MINIKUBE_WANTREPORTERRORPROMPT=false
 export MINIKUBE_HOME=$HOME
@@ -106,10 +119,27 @@ export KUBECONFIG=$HOME/.kube/config
 sudo swapoff -a
 
 ## Start minikube 
-sudo -E minikube start -v 4
+sudo -E minikube start -v 4 --vm-driver none --kubernetes-version v${KUBERNETES_VERSION} --bootstrapper kubeadm 
 
 ## Addons 
 sudo -E minikube addons  enable ingress
+
+## Configure vagrant clients dir
+
+printf "export MINIKUBE_WANTUPDATENOTIFICATION=false\n" >> /home/vagrant/.bashrc
+printf "export MINIKUBE_WANTREPORTERRORPROMPT=false\n" >> /home/vagrant/.bashrc
+printf "export MINIKUBE_HOME=/home/vagrant\n" >> /home/vagrant/.bashrc
+printf "export CHANGE_MINIKUBE_NONE_USER=true\n" >> /home/vagrant/.bashrc
+printf "export KUBECONFIG=/home/vagrant/.kube/config\n" >> /home/vagrant/.bashrc
+printf "source <(kubectl completion bash)\n" >> /home/vagrant/.bashrc
+
+# Permissions
+sudo chown -R $USER:$USER $HOME/.kube
+sudo chown -R $USER:$USER $HOME/.minikube
+
+# Enforce sysctl 
+sudo sysctl -w vm.max_map_count=262144
+sudo echo "vm.max_map_count=262144" | sudo tee -a /etc/sysctl.d/90-vm_max_map_count.conf
 
 SCRIPT
 
@@ -142,8 +172,10 @@ def configureVM(vmCfg, hostname, cpus, mem, srcdir, dstdir)
     provider.memory = mem
     provider.cpus = cpus
     provider.driver = "kvm"
-    provider.disk_bus = "virtio"
+    provider.disk_bus = "scsi"
     provider.machine_virtual_size = 64
+    provider.video_vram = 64
+
  
     override.vm.synced_folder srcdir, dstdir, type: 'sshfs', ssh_opts_append: "-o Compression=yes", sshfs_opts_append: "-o cache=no", disabled: false, create: true
   end
