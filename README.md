@@ -15,6 +15,10 @@ https://www.vagrantup.com/docs/installation/
 ### Arch
 ```
 sudo pacman -S vagrant
+
+vagrant plugin install pkg-config
+
+CONFIGURE_ARGS="with-libvirt-include=/usr/include/libvirt with-libvirt-lib=/usr/lib64" vagrant plugin install vagrant-libvirt
 ```
 
 ### Ubuntu
