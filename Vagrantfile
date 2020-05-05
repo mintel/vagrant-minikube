@@ -8,7 +8,7 @@ Vagrant.require_version ">= 2.0.0"
 NODES = ENV['NODES'] || 1
 
 # Memory & CPUs
-MEM = ENV['MEM'] || 6144
+MEM = ENV['MEM'] || 4096
 CPUS = ENV['CPUS'] || 2
 
 # User Data Mount
@@ -16,11 +16,11 @@ CPUS = ENV['CPUS'] || 2
 SRCDIR = ENV['SRCDIR'] || "/tmp/vagrant"
 DSTDIR = ENV['DSTDIR'] || "/home/vagrant/data"
 
-# Management 
+# Management
 GROWPART = ENV['GROWPART'] || "true"
 
 # Minikube Variables
-KUBERNETES_VERSION = ENV['KUBERNETES_VERSION'] || "1.11.4"
+KUBERNETES_VERSION = ENV['KUBERNETES_VERSION'] || "1.16.3"
 
 # Common installation script
 $installer = <<SCRIPT
@@ -28,10 +28,10 @@ $installer = <<SCRIPT
 
 # Update apt and get dependencies
 sudo apt-get -y update
-sudo apt-mark hold grub 
+sudo apt-mark hold grub
 sudo apt-mark hold grub-pc
 sudo apt-get -y upgrade
-sudo apt-get install -y zip unzip curl wget socat ebtables git vim 
+sudo apt-get install -y zip unzip curl wget socat ebtables git vim
 
 SCRIPT
 
@@ -45,7 +45,7 @@ $docker = <<SCRIPT
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
 sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
 sudo apt-get -y update
-sudo apt-get install -y docker-ce=17.03.3~ce-0~ubuntu-$(lsb_release -cs)
+sudo apt-get install -y docker-ce
 sudo systemctl start docker
 
 sudo usermod -a -G docker vagrant
@@ -71,31 +71,31 @@ $minikubescript = <<SCRIPT
 #Install minikube
 echo "Downloading Minikube"
 curl -q -Lo minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64 2>/dev/null
-chmod +x minikube 
+chmod +x minikube
 sudo mv minikube /usr/local/bin/
 
 #Install kubectl
 echo "Downloading Kubectl"
 curl -q -Lo kubectl https://storage.googleapis.com/kubernetes-release/release/v${KUBERNETES_VERSION}/bin/linux/amd64/kubectl 2>/dev/null
-chmod +x kubectl 
+chmod +x kubectl
 sudo mv kubectl /usr/local/bin/
 
 # Install crictl
-curl -qL https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.12.0/crictl-v1.12.0-linux-amd64.tar.gz 2>/dev/null | tar xzvf -
+curl -qL https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.16.1/crictl-v1.16.1-linux-amd64.tar.gz 2>/dev/null | tar xzvf -
 chmod +x crictl
 sudo mv crictl /usr/local/bin/
 
 #Install stern
 # TODO: Check sha256sum
 echo "Downloading Stern"
-curl -q -Lo stern https://github.com/wercker/stern/releases/download/1.10.0/stern_linux_amd64 2>/dev/null                                                                                 
+curl -q -Lo stern https://github.com/wercker/stern/releases/download/1.10.0/stern_linux_amd64 2>/dev/null
 chmod +x stern
 sudo mv stern /usr/local/bin/
 
 #Install kubecfg
 # TODO: Check sha256sum
 echo "Downloading Kubecfg"
-curl -q -Lo kubecfg https://github.com/ksonnet/kubecfg/releases/download/v0.9.0/kubecfg-linux-amd64 2>/dev/null                                                      
+curl -q -Lo kubecfg https://github.com/ksonnet/kubecfg/releases/download/v0.9.0/kubecfg-linux-amd64 2>/dev/null
 chmod +x kubecfg
 sudo mv kubecfg /usr/local/bin/
 
@@ -120,10 +120,10 @@ export KUBECONFIG=$HOME/.kube/config
 # Disable SWAP since is not supported on a kubernetes cluster
 sudo swapoff -a
 
-## Start minikube 
-sudo -E minikube start -v 4 --vm-driver none --kubernetes-version v${KUBERNETES_VERSION} --bootstrapper kubeadm 
+## Start minikube
+sudo -E minikube start -v 4 --vm-driver none --kubernetes-version v${KUBERNETES_VERSION} --bootstrapper kubeadm
 
-## Addons 
+## Addons
 sudo -E minikube addons  enable ingress
 
 ## Configure vagrant clients dir
@@ -139,7 +139,7 @@ printf "source <(kubectl completion bash)\n" >> /home/vagrant/.bashrc
 sudo chown -R $USER:$USER $HOME/.kube
 sudo chown -R $USER:$USER $HOME/.minikube
 
-# Enforce sysctl 
+# Enforce sysctl
 sudo sysctl -w vm.max_map_count=262144
 sudo echo "vm.max_map_count=262144" | sudo tee -a /etc/sysctl.d/90-vm_max_map_count.conf
 
@@ -160,8 +160,8 @@ end
 
 def configureVM(vmCfg, hostname, cpus, mem, srcdir, dstdir)
 
-  vmCfg.vm.box = "roboxes/ubuntu1604"
-  
+  vmCfg.vm.box = "roboxes/ubuntu1804"
+
   vmCfg.vm.hostname = hostname
   vmCfg.vm.network "private_network", type: "dhcp",  :model_type => "virtio", :autostart => true
 
@@ -178,10 +178,10 @@ def configureVM(vmCfg, hostname, cpus, mem, srcdir, dstdir)
     provider.machine_virtual_size = 64
     provider.video_vram = 64
 
- 
+
     override.vm.synced_folder srcdir, dstdir, type: 'sshfs', ssh_opts_append: "-o Compression=yes", sshfs_opts_append: "-o cache=no", disabled: false, create: true
   end
-  
+
   vmCfg.vm.provider "virtualbox" do |provider, override|
     provider.memory = mem
     provider.cpus = cpus
@@ -191,9 +191,9 @@ def configureVM(vmCfg, hostname, cpus, mem, srcdir, dstdir)
   end
 
   # ensure docker is installed # Use our script so we can get a proper support version
-  vmCfg.vm.provision "shell", inline: $docker, privileged: false 
+  vmCfg.vm.provision "shell", inline: $docker, privileged: false
   # Script to prepare the VM
-  vmCfg.vm.provision "shell", inline: $installer, privileged: false 
+  vmCfg.vm.provision "shell", inline: $installer, privileged: false
   vmCfg.vm.provision "shell", inline: $growpart, privileged: false if GROWPART == "true"
   vmCfg.vm.provision "shell", inline: $minikubescript, privileged: false, env: {"KUBERNETES_VERSION" => KUBERNETES_VERSION}
 
@@ -211,9 +211,9 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
     mem = MEM
     srcdir = SRCDIR
     dstdir = DSTDIR
-    
+
     config.vm.define hostname do |vmCfg|
-      vmCfg = configureVM(vmCfg, hostname, cpus, mem, srcdir, dstdir)  
+      vmCfg = configureVM(vmCfg, hostname, cpus, mem, srcdir, dstdir)
     end
   end
 
